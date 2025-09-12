@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  log-analyzer:
+    build: .
+    container_name: kinsta-log-analyzer
+    volumes:
+      # Mount logs directory
+      - ./logs:/app/logs:ro
+      # Mount output directory
+      - ./output:/app/output
+      # Mount custom config if needed
+      - ./config.yaml:/app/config.yaml:ro
+    # Override default command to analyze a specific log file
+    # Example: docker-compose run log-analyzer --input /app/logs/access.log-2025-07-08-123456 --verbose
+    command: ["--help"]
+    
+    # Environment variables (optional)
+    environment:
+      - TZ=UTC
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'

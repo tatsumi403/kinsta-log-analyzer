@@ -1,0 +1,81 @@
+thresholds:
+  error_rate_warning: 5.0  # %
+  slow_request_time: 3.0   # seconds
+  
+security:
+  sql_injection_patterns:
+    - "union select"
+    - "union all select"
+    - "or 1=1"
+    - "or '1'='1"
+    - "or \"1\"=\"1"
+    - "drop table"
+    - "drop database"
+    - "insert into"
+    - "update set"
+    - "delete from"
+    - "exec("
+    - "execute("
+    - "sp_executesql"
+    - "xp_cmdshell"
+    - "'; drop"
+    - "\"; drop"
+    - "' union"
+    - "\" union"
+    - "' or sleep"
+    - "\" or sleep"
+    
+  xss_patterns:
+    - "<script"
+    - "</script>"
+    - "javascript:"
+    - "onerror="
+    - "onload="
+    - "onclick="
+    - "onmouseover="
+    - "<iframe"
+    - "<object"
+    - "<embed"
+    - "eval("
+    - "alert("
+    - "confirm("
+    - "prompt("
+    - "document.cookie"
+    - "document.write"
+    - "innerhtml"
+    - "fromcharcode"
+    
+  crawler_user_agents:
+    - "googlebot"
+    - "bingbot"
+    - "slurp"
+    - "duckduckbot"
+    - "baiduspider"
+    - "yandexbot"
+    - "facebookexternalhit"
+    - "twitterbot"
+    
+  attack_tool_patterns:
+    - "sqlmap"
+    - "nikto"
+    - "nessus"
+    - "burp"
+    - "zaproxy"
+    - "gobuster"
+    - "dirb"
+    - "dirbuster"
+    - "nmap"
+    - "masscan"
+    - "nuclei"
+    - "ffuf"
+    - "wfuzz"
+    - "python-requests"
+    - "curl/"
+    - "wget/"
+    - "libwww-perl"
+    
+output:
+  top_ips_count: 10
+  top_errors_count: 10
+  report_format: "markdown"
+  output_directory: "./output"
