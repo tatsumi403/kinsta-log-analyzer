@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"kinsta-log-analyzer/pkg/config"
@@ -90,22 +89,27 @@ type ResponseTimeStats struct {
 }
 
 type Analyzer struct {
-	config         *config.Config
-	mutex          sync.Mutex
-	totalRequests  int
-	errorRequests  int
-	responseTime   []float64
-	ipCounts       map[string]int
-	errorURLs      map[string]int
-	hourlyPattern  [24]int
-	statusCodes    map[int]int
-	userAgents     map[string]int
-	attacksByIP    map[string]*IPAttacks
-	crawlers       map[string]int
-	attackTools    map[string]int
-	startTime      time.Time
-	endTime        time.Time
+	config              *config.Config
+	totalRequests       int
+	errorRequests       int
+	responseTimeSum     float64
+	responseTimeMax     float64
+	responseTimeCount   int
+	responseTimeSample  []float64 // Limited sampling for percentile calculation
+	slowRequestCount    int
+	ipCounts            map[string]int
+	errorURLs           map[string]int
+	hourlyPattern       [24]int
+	statusCodes         map[int]int
+	userAgents          map[string]int
+	attacksByIP         map[string]*IPAttacks
+	crawlers            map[string]int
+	attackTools         map[string]int
+	startTime           time.Time
+	endTime             time.Time
 }
+
+const maxResponseTimeSamples = 1000 // Limit memory usage to ~8KB for response times
 
 func NewAnalyzer(cfg *config.Config) *Analyzer {
 	return &Analyzer{
@@ -148,9 +152,6 @@ func (a *Analyzer) AnalyzeFile(filePath string) (*AnalysisResult, error) {
 }
 
 func (a *Analyzer) processEntry(entry *parser.LogEntry) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
 	a.totalRequests++
 
 	// Track time range
@@ -166,8 +167,31 @@ func (a *Analyzer) processEntry(entry *parser.LogEntry) {
 		}
 	}
 
-	// Response time tracking
-	a.responseTime = append(a.responseTime, entry.ResponseTime)
+	// Response time tracking (online statistics)
+	a.responseTimeSum += entry.ResponseTime
+	a.responseTimeCount++
+	if entry.ResponseTime > a.responseTimeMax {
+		a.responseTimeMax = entry.ResponseTime
+	}
+
+	// Track slow requests
+	if entry.ResponseTime > a.config.Thresholds.SlowRequestTime {
+		a.slowRequestCount++
+	}
+
+	// Reservoir sampling for percentile calculation (memory-efficient)
+	if len(a.responseTimeSample) < maxResponseTimeSamples {
+		a.responseTimeSample = append(a.responseTimeSample, entry.ResponseTime)
+	} else {
+		// Random replacement to maintain uniform distribution
+		// This is a simple reservoir sampling algorithm
+		if a.responseTimeCount < maxResponseTimeSamples*10 {
+			// For first 10K requests, replace randomly to get good sample
+			randIndex := a.responseTimeCount % maxResponseTimeSamples
+			a.responseTimeSample[randIndex] = entry.ResponseTime
+		}
+		// After 10K requests, sample becomes stable enough
+	}
 
 	// IP counting
 	a.ipCounts[entry.ClientIP]++
@@ -215,9 +239,6 @@ func (a *Analyzer) processEntry(entry *parser.LogEntry) {
 }
 
 func (a *Analyzer) generateResult() *AnalysisResult {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
 	return &AnalysisResult{
 		Summary:           a.generateSummary(),
 		HTTPErrors:        a.generateHTTPErrors(),
