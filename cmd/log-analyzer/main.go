@@ -11,6 +11,7 @@ import (
 	"kinsta-log-analyzer/pkg/analyzer"
 	"kinsta-log-analyzer/pkg/config"
 	"kinsta-log-analyzer/pkg/report"
+	"kinsta-log-analyzer/pkg/utils"
 )
 
 var (
@@ -99,19 +100,19 @@ func printSummary(result *analyzer.AnalysisResult, reportPath string, duration t
 	fmt.Printf("レポート生成: %s\n\n", reportPath)
 
 	// Basic statistics
-	fmt.Printf("総リクエスト数: %s\n", formatNumber(result.Summary.TotalRequests))
+	fmt.Printf("総リクエスト数: %s\n", utils.FormatNumber(result.Summary.TotalRequests))
 	fmt.Printf("エラー率: %.2f%%\n", result.Summary.ErrorRate)
 	fmt.Printf("平均レスポンス時間: %.3f秒\n\n", result.Summary.AvgResponseTime)
 
 	// Security summary
 	fmt.Println("セキュリティ分析:")
-	fmt.Printf("  SQLインジェクション試行: %s\n", formatNumber(result.SecurityAnalysis.SQLInjectionAttempts))
-	fmt.Printf("  XSS試行: %s\n", formatNumber(result.SecurityAnalysis.XSSAttempts))
+	fmt.Printf("  SQLインジェクション試行: %s\n", utils.FormatNumber(result.SecurityAnalysis.SQLInjectionAttempts))
+	fmt.Printf("  XSS試行: %s\n", utils.FormatNumber(result.SecurityAnalysis.XSSAttempts))
 	fmt.Printf("  疑わしいIP: %d\n\n", len(result.SecurityAnalysis.SuspiciousIPs))
 
 	// Performance summary
 	fmt.Println("パフォーマンス分析:")
-	fmt.Printf("  遅いリクエスト(3秒超): %s\n", formatNumber(result.Statistics.ResponseTimeStats.SlowRequests))
+	fmt.Printf("  遅いリクエスト(3秒超): %s\n", utils.FormatNumber(result.Statistics.ResponseTimeStats.SlowRequests))
 	fmt.Printf("  最大レスポンス時間: %.3f秒\n", result.Statistics.ResponseTimeStats.Maximum)
 	fmt.Printf("  95パーセンタイル: %.3f秒\n\n", result.Statistics.ResponseTimeStats.Percentile95)
 
@@ -125,9 +126,9 @@ func printSummary(result *analyzer.AnalysisResult, reportPath string, duration t
 		for i := 0; i < count; i++ {
 			url := result.HTTPErrors.TopErrorURLs[i]
 			if len(url.URL) > 60 {
-				fmt.Printf("  %d. %s... (%sエラー)\n", i+1, url.URL[:57], formatNumber(url.Count))
+				fmt.Printf("  %d. %s... (%sエラー)\n", i+1, url.URL[:57], utils.FormatNumber(url.Count))
 			} else {
-				fmt.Printf("  %d. %s (%sエラー)\n", i+1, url.URL, formatNumber(url.Count))
+				fmt.Printf("  %d. %s (%sエラー)\n", i+1, url.URL, utils.FormatNumber(url.Count))
 			}
 		}
 		fmt.Println()
@@ -178,28 +179,6 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 	fmt.Println()
 }
 
-func formatNumber(num int) string {
-	if num < 1000 {
-		return fmt.Sprintf("%d", num)
-	}
-	return addCommas(num)
-}
-
-func addCommas(num int) string {
-	str := fmt.Sprintf("%d", num)
-	if len(str) <= 3 {
-		return str
-	}
-	
-	result := ""
-	for i, digit := range str {
-		if i > 0 && (len(str)-i)%3 == 0 {
-			result += ","
-		}
-		result += string(digit)
-	}
-	return result
-}
 
 func init() {
 	flag.Usage = func() {

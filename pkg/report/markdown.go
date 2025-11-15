@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"kinsta-log-analyzer/pkg/analyzer"
+	"kinsta-log-analyzer/pkg/utils"
 )
 
 type MarkdownReporter struct {
@@ -76,7 +77,7 @@ func (r *MarkdownReporter) writeSummary(sb *strings.Builder, summary analyzer.Su
 	sb.WriteString(fmt.Sprintf("- **解析期間:** %s - %s\n",
 		summary.StartTime.Format("2006-01-02 15:04:05"),
 		summary.EndTime.Format("2006-01-02 15:04:05")))
-	sb.WriteString(fmt.Sprintf("- **総リクエスト数:** %s\n", formatNumber(summary.TotalRequests)))
+	sb.WriteString(fmt.Sprintf("- **総リクエスト数:** %s\n", utils.FormatNumber(summary.TotalRequests)))
 	sb.WriteString(fmt.Sprintf("- **エラー率:** %.2f%%\n", summary.ErrorRate))
 	sb.WriteString(fmt.Sprintf("- **平均レスポンス時間:** %.3f秒\n\n", summary.AvgResponseTime))
 }
@@ -89,7 +90,7 @@ func (r *MarkdownReporter) writeHTTPErrors(sb *strings.Builder, errors analyzer.
 	if len(errors.ClientErrors) > 0 {
 		for status, count := range errors.ClientErrors {
 			statusText := getStatusText(status)
-			sb.WriteString(fmt.Sprintf("- **%d %s:** %sリクエスト\n", status, statusText, formatNumber(count)))
+			sb.WriteString(fmt.Sprintf("- **%d %s:** %sリクエスト\n", status, statusText, utils.FormatNumber(count)))
 		}
 	} else {
 		sb.WriteString("4xxエラーは検出されませんでした。\n")
@@ -101,7 +102,7 @@ func (r *MarkdownReporter) writeHTTPErrors(sb *strings.Builder, errors analyzer.
 	if len(errors.ServerErrors) > 0 {
 		for status, count := range errors.ServerErrors {
 			statusText := getStatusText(status)
-			sb.WriteString(fmt.Sprintf("- **%d %s:** %sリクエスト\n", status, statusText, formatNumber(count)))
+			sb.WriteString(fmt.Sprintf("- **%d %s:** %sリクエスト\n", status, statusText, utils.FormatNumber(count)))
 		}
 	} else {
 		sb.WriteString("5xxエラーは検出されませんでした。\n")
@@ -112,7 +113,7 @@ func (r *MarkdownReporter) writeHTTPErrors(sb *strings.Builder, errors analyzer.
 	sb.WriteString("### エラー頻発URL（上位）\n\n")
 	if len(errors.TopErrorURLs) > 0 {
 		for i, urlError := range errors.TopErrorURLs {
-			sb.WriteString(fmt.Sprintf("%d. `%s`: %sエラー\n", i+1, urlError.URL, formatNumber(urlError.Count)))
+			sb.WriteString(fmt.Sprintf("%d. `%s`: %sエラー\n", i+1, urlError.URL, utils.FormatNumber(urlError.Count)))
 		}
 	} else {
 		sb.WriteString("エラーURLは見つかりませんでした。\n")
@@ -125,7 +126,7 @@ func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security a
 
 	// SQL Injection
 	sb.WriteString("### SQLインジェクション攻撃\n\n")
-	sb.WriteString(fmt.Sprintf("- **攻撃試行数:** %s\n", formatNumber(security.SQLInjectionAttempts)))
+	sb.WriteString(fmt.Sprintf("- **攻撃試行数:** %s\n", utils.FormatNumber(security.SQLInjectionAttempts)))
 	
 	if security.SQLInjectionAttempts > 0 {
 		sb.WriteString("- **主要攻撃IP:**\n")
@@ -141,7 +142,7 @@ func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security a
 
 	// XSS Attempts
 	sb.WriteString("### XSS攻撃\n\n")
-	sb.WriteString(fmt.Sprintf("- **攻撃試行数:** %s\n", formatNumber(security.XSSAttempts)))
+	sb.WriteString(fmt.Sprintf("- **攻撃試行数:** %s\n", utils.FormatNumber(security.XSSAttempts)))
 	
 	if security.XSSAttempts > 0 {
 		sb.WriteString("- **主要攻撃IP:**\n")
@@ -186,7 +187,7 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	sb.WriteString("| 時間 | リクエスト数 |\n")
 	sb.WriteString("|------|----------|\n")
 	for hour, count := range stats.HourlyPattern {
-		sb.WriteString(fmt.Sprintf("| %02d:00-%02d:00 | %s |\n", hour, hour+1, formatNumber(count)))
+		sb.WriteString(fmt.Sprintf("| %02d:00-%02d:00 | %s |\n", hour, hour+1, utils.FormatNumber(count)))
 	}
 	sb.WriteString("\n")
 
@@ -194,7 +195,7 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	sb.WriteString("### 頻出IPアドレス（上位）\n\n")
 	if len(stats.TopIPs) > 0 {
 		for i, ip := range stats.TopIPs {
-			sb.WriteString(fmt.Sprintf("%d. **%s:** %sリクエスト\n", i+1, ip.IP, formatNumber(ip.Count)))
+			sb.WriteString(fmt.Sprintf("%d. **%s:** %sリクエスト\n", i+1, ip.IP, utils.FormatNumber(ip.Count)))
 		}
 	} else {
 		sb.WriteString("IPデータがありません。\n")
@@ -206,7 +207,7 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	sb.WriteString(fmt.Sprintf("- **平均:** %.3f秒\n", stats.ResponseTimeStats.Average))
 	sb.WriteString(fmt.Sprintf("- **最大:** %.3f秒\n", stats.ResponseTimeStats.Maximum))
 	sb.WriteString(fmt.Sprintf("- **95パーセンタイル:** %.3f秒\n", stats.ResponseTimeStats.Percentile95))
-	sb.WriteString(fmt.Sprintf("- **遅いリクエスト（3秒超）:** %s\n", formatNumber(stats.ResponseTimeStats.SlowRequests)))
+	sb.WriteString(fmt.Sprintf("- **遅いリクエスト（3秒超）:** %s\n", utils.FormatNumber(stats.ResponseTimeStats.SlowRequests)))
 	sb.WriteString("\n")
 
 	// Status Code Distribution
@@ -215,7 +216,7 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	sb.WriteString("|-------------|-------|\n")
 	for status, count := range stats.StatusCodes {
 		statusText := getStatusText(status)
-		sb.WriteString(fmt.Sprintf("| %d %s | %s |\n", status, statusText, formatNumber(count)))
+		sb.WriteString(fmt.Sprintf("| %d %s | %s |\n", status, statusText, utils.FormatNumber(count)))
 	}
 	sb.WriteString("\n")
 }
@@ -227,7 +228,7 @@ func (r *MarkdownReporter) writeUserAgentAnalysis(sb *strings.Builder, ua analyz
 	sb.WriteString("### 検出されたクローラー\n\n")
 	if len(ua.Crawlers) > 0 {
 		for agent, count := range ua.Crawlers {
-			sb.WriteString(fmt.Sprintf("- **%s:** %sリクエスト\n", agent, formatNumber(count)))
+			sb.WriteString(fmt.Sprintf("- **%s:** %sリクエスト\n", agent, utils.FormatNumber(count)))
 		}
 	} else {
 		sb.WriteString("クローラーは検出されませんでした。\n")
@@ -238,7 +239,7 @@ func (r *MarkdownReporter) writeUserAgentAnalysis(sb *strings.Builder, ua analyz
 	sb.WriteString("### 検出された攻撃ツール\n\n")
 	if len(ua.AttackTools) > 0 {
 		for tool, count := range ua.AttackTools {
-			sb.WriteString(fmt.Sprintf("- **%s:** %sリクエスト\n", tool, formatNumber(count)))
+			sb.WriteString(fmt.Sprintf("- **%s:** %sリクエスト\n", tool, utils.FormatNumber(count)))
 		}
 	} else {
 		sb.WriteString("攻撃ツールは検出されませんでした。\n")
@@ -257,35 +258,12 @@ func (r *MarkdownReporter) writeUserAgentAnalysis(sb *strings.Builder, ua analyz
 			if len(userAgent) > 80 {
 				userAgent = userAgent[:77] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("%d. `%s` - %sリクエスト\n", i+1, userAgent, formatNumber(suspicious.Count)))
+			sb.WriteString(fmt.Sprintf("%d. `%s` - %sリクエスト\n", i+1, userAgent, utils.FormatNumber(suspicious.Count)))
 		}
 	} else {
 		sb.WriteString("不審なユーザーエージェントは検出されませんでした。\n")
 	}
 	sb.WriteString("\n")
-}
-
-func formatNumber(num int) string {
-	if num < 1000 {
-		return fmt.Sprintf("%d", num)
-	}
-	return fmt.Sprintf("%s", addCommas(num))
-}
-
-func addCommas(num int) string {
-	str := fmt.Sprintf("%d", num)
-	if len(str) <= 3 {
-		return str
-	}
-	
-	result := ""
-	for i, digit := range str {
-		if i > 0 && (len(str)-i)%3 == 0 {
-			result += ","
-		}
-		result += string(digit)
-	}
-	return result
 }
 
 func getStatusText(code int) string {

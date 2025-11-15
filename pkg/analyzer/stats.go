@@ -11,12 +11,8 @@ func (a *Analyzer) generateSummary() Summary {
 	}
 
 	avgResponseTime := 0.0
-	if len(a.responseTime) > 0 {
-		total := 0.0
-		for _, rt := range a.responseTime {
-			total += rt
-		}
-		avgResponseTime = total / float64(len(a.responseTime))
+	if a.responseTimeCount > 0 {
+		avgResponseTime = a.responseTimeSum / float64(a.responseTimeCount)
 	}
 
 	return Summary{
@@ -163,43 +159,33 @@ func (a *Analyzer) generateUserAgentAnalysis() UserAgentAnalysis {
 }
 
 func (a *Analyzer) calculateResponseTimeStats() ResponseTimeStats {
-	if len(a.responseTime) == 0 {
+	if a.responseTimeCount == 0 {
 		return ResponseTimeStats{}
 	}
 
-	// Sort for percentile calculation
-	sortedTimes := make([]float64, len(a.responseTime))
-	copy(sortedTimes, a.responseTime)
-	sort.Float64s(sortedTimes)
+	// Calculate average from pre-computed sum
+	average := a.responseTimeSum / float64(a.responseTimeCount)
 
-	// Calculate statistics
-	total := 0.0
-	max := 0.0
-	slowCount := 0
+	// Calculate 95th percentile from sample
+	percentile95 := 0.0
+	if len(a.responseTimeSample) > 0 {
+		// Sort the sample for percentile calculation
+		sortedSample := make([]float64, len(a.responseTimeSample))
+		copy(sortedSample, a.responseTimeSample)
+		sort.Float64s(sortedSample)
 
-	for _, rt := range a.responseTime {
-		total += rt
-		if rt > max {
-			max = rt
+		// Calculate 95th percentile from sample
+		p95Index := int(0.95 * float64(len(sortedSample)))
+		if p95Index >= len(sortedSample) {
+			p95Index = len(sortedSample) - 1
 		}
-		if rt > a.config.Thresholds.SlowRequestTime {
-			slowCount++
-		}
+		percentile95 = sortedSample[p95Index]
 	}
-
-	average := total / float64(len(a.responseTime))
-
-	// 95th percentile
-	p95Index := int(0.95 * float64(len(sortedTimes)))
-	if p95Index >= len(sortedTimes) {
-		p95Index = len(sortedTimes) - 1
-	}
-	percentile95 := sortedTimes[p95Index]
 
 	return ResponseTimeStats{
 		Average:      average,
-		Maximum:      max,
+		Maximum:      a.responseTimeMax,
 		Percentile95: percentile95,
-		SlowRequests: slowCount,
+		SlowRequests: a.slowRequestCount,
 	}
 }
