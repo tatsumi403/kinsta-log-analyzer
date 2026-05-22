@@ -8,6 +8,7 @@ import (
 
 	"kinsta-log-analyzer/pkg/config"
 	"kinsta-log-analyzer/pkg/parser"
+	"kinsta-log-analyzer/pkg/utils"
 )
 
 type AnalysisResult struct {
@@ -40,10 +41,12 @@ type SecurityAnalysis struct {
 }
 
 type Statistics struct {
-	HourlyPattern    [24]int
-	TopIPs           []IPCount
-	ResponseTimeStats ResponseTimeStats
-	StatusCodes      map[int]int
+	HourlyPattern      [24]int
+	HourlyClientErrors [24]int
+	HourlyServerErrors [24]int
+	TopIPs             []IPCount
+	ResponseTimeStats  ResponseTimeStats
+	StatusCodes        map[int]int
 }
 
 type UserAgentAnalysis struct {
@@ -100,6 +103,8 @@ type Analyzer struct {
 	ipCounts            map[string]int
 	errorURLs           map[string]int
 	hourlyPattern       [24]int
+	hourlyClientErrors  [24]int
+	hourlyServerErrors  [24]int
 	statusCodes         map[int]int
 	userAgents          map[string]int
 	attacksByIP         map[string]*IPAttacks
@@ -196,9 +201,14 @@ func (a *Analyzer) processEntry(entry *parser.LogEntry) {
 	// IP counting
 	a.ipCounts[entry.ClientIP]++
 
-	// Hourly pattern
-	hour := entry.Timestamp.Hour()
+	// Hourly pattern — bucket by JST so reports show local time
+	hour := entry.Timestamp.In(utils.JST).Hour()
 	a.hourlyPattern[hour]++
+	if entry.IsClientError() {
+		a.hourlyClientErrors[hour]++
+	} else if entry.IsServerError() {
+		a.hourlyServerErrors[hour]++
+	}
 
 	// Status codes
 	a.statusCodes[entry.StatusCode]++

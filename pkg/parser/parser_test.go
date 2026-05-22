@@ -46,6 +46,38 @@ func TestParseLogLine(t *testing.T) {
 	}
 }
 
+func TestParseLogLine_NewFormat(t *testing.T) {
+	// New Kinsta format: method/protocol are unquoted, URI alone is quoted.
+	logLine := `kinstahelptesting.kinsta.cloud 98.43.13.94 [22/Sep/2021:21:26:10 +0000] GET "/wp-admin/" HTTP/1.0 302 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:92.0) Gecko/20100101 Firefox/92.0" 98.43.13.94 "/wp-admin/index.php" - - 472 0.562 0.560`
+
+	entry, err := ParseLogLine(logLine)
+	if err != nil {
+		t.Fatalf("Failed to parse new-format log line: %v", err)
+	}
+
+	if entry.Method != "GET" {
+		t.Errorf("Expected method 'GET', got '%s'", entry.Method)
+	}
+	if entry.URI != "/wp-admin/" {
+		t.Errorf("Expected URI '/wp-admin/', got '%s'", entry.URI)
+	}
+	if entry.Protocol != "HTTP/1.0" {
+		t.Errorf("Expected protocol 'HTTP/1.0', got '%s'", entry.Protocol)
+	}
+	if entry.StatusCode != 302 {
+		t.Errorf("Expected status code 302, got %d", entry.StatusCode)
+	}
+	if entry.RealIP != "98.43.13.94" {
+		t.Errorf("Expected real IP '98.43.13.94', got '%s'", entry.RealIP)
+	}
+	if entry.UpstreamURI != "/wp-admin/index.php" {
+		t.Errorf("Expected upstream URI '/wp-admin/index.php', got '%s'", entry.UpstreamURI)
+	}
+	if entry.ResponseTime != 0.560 {
+		t.Errorf("Expected response time 0.560, got %f", entry.ResponseTime)
+	}
+}
+
 func TestParseLogLineErrors(t *testing.T) {
 	testCases := []struct {
 		name    string

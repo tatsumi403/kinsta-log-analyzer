@@ -28,7 +28,14 @@ var (
 	timestampRegex = regexp.MustCompile(`\[([^\]]+)\]`)
 	quotedRegex    = regexp.MustCompile(`"([^"]*)"`)
 	numberRegex    = regexp.MustCompile(`\d+\.?\d*`)
+	ipv4Regex      = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
+	statusRegex    = regexp.MustCompile(`^\d{3}$`)
 )
+
+var httpMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "DELETE": true,
+	"HEAD": true, "OPTIONS": true, "PATCH": true, "TRACE": true, "CONNECT": true,
+}
 
 func ParseLogLine(line string) (*LogEntry, error) {
 	if strings.TrimSpace(line) == "" {
@@ -58,45 +65,67 @@ func ParseLogLine(line string) (*LogEntry, error) {
 		entry.Timestamp = timestamp
 	}
 
-	// Method, URI, Protocol from quoted request string
+	// Method, URI, Protocol — supports both log formats:
+	//   old: "GET /path HTTP/1.1"   (everything inside the first quoted string)
+	//   new: GET "/path" HTTP/1.1   (method/protocol unquoted, URI alone in quotes)
 	quotedMatches := quotedRegex.FindAllStringSubmatch(line, -1)
+	quotedIndex := quotedRegex.FindAllStringSubmatchIndex(line, -1)
 	if len(quotedMatches) >= 3 {
-		// Parse "GET /wp-admin/ HTTP/1.0"
 		requestParts := strings.Fields(quotedMatches[0][1])
-		if len(requestParts) >= 3 {
+		isOldFormat := len(requestParts) >= 3 && strings.HasPrefix(requestParts[len(requestParts)-1], "HTTP/")
+		if isOldFormat {
 			entry.Method = requestParts[0]
-			entry.URI = requestParts[1]
-			entry.Protocol = requestParts[2]
+			entry.URI = strings.Join(requestParts[1:len(requestParts)-1], " ")
+			entry.Protocol = requestParts[len(requestParts)-1]
+		} else {
+			entry.URI = quotedMatches[0][1]
+			for i, part := range parts {
+				if httpMethods[part] {
+					entry.Method = part
+					if i+2 < len(parts) && strings.HasPrefix(parts[i+2], "HTTP/") {
+						entry.Protocol = parts[i+2]
+					}
+					break
+				}
+			}
 		}
-		
-		// Referer (second quoted string, might be "-")
+
 		entry.Referer = quotedMatches[1][1]
-		
-		// User Agent (third quoted string)
 		entry.UserAgent = quotedMatches[2][1]
 	}
 
-	// Status Code
-	statusIdx := -1
-	for i, part := range parts {
-		if matched, _ := regexp.MatchString(`^\d{3}$`, part); matched {
+	// Status Code — first exact 3-digit token
+	for _, part := range parts {
+		if statusRegex.MatchString(part) {
 			if statusCode, err := strconv.Atoi(part); err == nil {
 				entry.StatusCode = statusCode
-				statusIdx = i
 				break
 			}
 		}
 	}
 
-	// Real IP (after status code)
-	if statusIdx >= 0 && statusIdx+2 < len(parts) {
-		entry.RealIP = parts[statusIdx+2]
+	// Real IP — first IPv4 token after the User-Agent's closing quote.
+	// Robust to both formats; the old `parts[statusIdx+2]` heuristic broke
+	// for the new format because the UA (which contains spaces) sits between.
+	if len(quotedIndex) >= 3 {
+		uaEnd := quotedIndex[2][1]
+		for _, p := range strings.Fields(line[uaEnd:]) {
+			if ipv4Regex.MatchString(p) {
+				entry.RealIP = p
+				break
+			}
+		}
 	}
 
-	// Upstream URI (quoted string after real IP)
-	upstreamMatch := regexp.MustCompile(`"([^"]*?)"`).FindStringSubmatch(line[strings.LastIndex(line, entry.RealIP)+len(entry.RealIP):])
-	if len(upstreamMatch) > 1 {
-		entry.UpstreamURI = upstreamMatch[1]
+	// Upstream URI — first quoted string after Real IP
+	if entry.RealIP != "" {
+		realIPPos := strings.LastIndex(line, entry.RealIP)
+		if realIPPos >= 0 {
+			upstreamMatch := quotedRegex.FindStringSubmatch(line[realIPPos+len(entry.RealIP):])
+			if len(upstreamMatch) > 1 {
+				entry.UpstreamURI = upstreamMatch[1]
+			}
+		}
 	}
 
 	// Response Size and Response Time (last two numeric values)
