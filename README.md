@@ -256,29 +256,3 @@ cat config.yaml
 # デフォルト設定で実行
 ./log-analyzer --input logs/sample-access.log
 ```
-
-## 今後の拡張予定
-
-- [ ] JSON形式のレポート出力
-- [ ] リアルタイムログ監視モード
-- [ ] Prometheus メトリクスエクスポート
-- [ ] Web UI ダッシュボード
-- [ ] 複数ログファイルの一括処理
-- [ ] IPアドレスのGeoLocation情報
-- [ ] カスタムアラート設定
-
-## ライセンス
-
-このプロジェクトは MIT ライセンスの下で公開されています。
-
-## 貢献
-
-バグレポートや機能リクエストは、GitHubのIssuesでお知らせください。プルリクエストも歓迎します。
-
-## 作者
-
-このプロジェクトは Claude Code を使用して開発されました。
-
----
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
