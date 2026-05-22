@@ -27,8 +27,8 @@ func (r *MarkdownReporter) GenerateReport(result *analyzer.AnalysisResult) (stri
 		return "", fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	// Generate filename with timestamp
-	timestamp := time.Now().Format("20060102_150405")
+	// Generate filename with timestamp (JST)
+	timestamp := time.Now().In(utils.JST).Format("20060102_150405")
 	filename := fmt.Sprintf("analysis_report_%s.md", timestamp)
 	filepath := filepath.Join(r.outputDir, filename)
 
@@ -48,7 +48,7 @@ func (r *MarkdownReporter) generateMarkdown(result *analyzer.AnalysisResult) str
 
 	// Header
 	sb.WriteString("# Kinsta アクセスログ解析レポート\n\n")
-	sb.WriteString(fmt.Sprintf("**生成日時:** %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("**生成日時:** %s (JST)\n\n", time.Now().In(utils.JST).Format("2006-01-02 15:04:05")))
 
 	// Summary section
 	r.writeSummary(&sb, result.Summary)
@@ -74,9 +74,9 @@ func (r *MarkdownReporter) generateMarkdown(result *analyzer.AnalysisResult) str
 
 func (r *MarkdownReporter) writeSummary(sb *strings.Builder, summary analyzer.Summary) {
 	sb.WriteString("## 概要\n\n")
-	sb.WriteString(fmt.Sprintf("- **解析期間:** %s - %s\n",
-		summary.StartTime.Format("2006-01-02 15:04:05"),
-		summary.EndTime.Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("- **解析期間:** %s - %s (JST)\n",
+		summary.StartTime.In(utils.JST).Format("2006-01-02 15:04:05"),
+		summary.EndTime.In(utils.JST).Format("2006-01-02 15:04:05")))
 	sb.WriteString(fmt.Sprintf("- **総リクエスト数:** %s\n", utils.FormatNumber(summary.TotalRequests)))
 	sb.WriteString(fmt.Sprintf("- **エラー率:** %.2f%%\n", summary.ErrorRate))
 	sb.WriteString(fmt.Sprintf("- **平均レスポンス時間:** %.3f秒\n\n", summary.AvgResponseTime))
@@ -182,14 +182,17 @@ func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security a
 func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.Statistics) {
 	sb.WriteString("## 統計情報\n\n")
 
-	// Hourly Access Pattern
-	sb.WriteString("### 時間別アクセス統計\n\n")
+	// Hourly Access Pattern (JST)
+	sb.WriteString("### 時間別アクセス統計 (JST)\n\n")
 	sb.WriteString("| 時間 | リクエスト数 |\n")
 	sb.WriteString("|------|----------|\n")
 	for hour, count := range stats.HourlyPattern {
 		sb.WriteString(fmt.Sprintf("| %02d:00-%02d:00 | %s |\n", hour, hour+1, utils.FormatNumber(count)))
 	}
 	sb.WriteString("\n")
+
+	writeHourlyErrorTable(sb, "4xxエラー（時間別・JST）", "4xxエラー数", stats.HourlyClientErrors)
+	writeHourlyErrorTable(sb, "5xxエラー（時間別・JST）", "5xxエラー数", stats.HourlyServerErrors)
 
 	// Top IPs
 	sb.WriteString("### 頻出IPアドレス（上位）\n\n")
@@ -217,6 +220,26 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	for status, count := range stats.StatusCodes {
 		statusText := getStatusText(status)
 		sb.WriteString(fmt.Sprintf("| %d %s | %s |\n", status, statusText, utils.FormatNumber(count)))
+	}
+	sb.WriteString("\n")
+}
+
+// writeHourlyErrorTable emits a per-hour error count table (4xx or 5xx).
+// If the total across all 24 hours is 0, the table is skipped entirely.
+// Otherwise all 24 rows are emitted to mirror the total-requests table.
+func writeHourlyErrorTable(sb *strings.Builder, heading, valueColumn string, hourly [24]int) {
+	total := 0
+	for _, c := range hourly {
+		total += c
+	}
+	if total == 0 {
+		return
+	}
+	sb.WriteString(fmt.Sprintf("#### %s\n\n", heading))
+	sb.WriteString(fmt.Sprintf("| 時間 | %s |\n", valueColumn))
+	sb.WriteString("|------|----------|\n")
+	for hour, count := range hourly {
+		sb.WriteString(fmt.Sprintf("| %02d:00-%02d:00 | %s |\n", hour, hour+1, utils.FormatNumber(count)))
 	}
 	sb.WriteString("\n")
 }

@@ -118,10 +118,12 @@ func (a *Analyzer) generateStatistics() Statistics {
 	responseTimeStats := a.calculateResponseTimeStats()
 
 	return Statistics{
-		HourlyPattern:     a.hourlyPattern,
-		TopIPs:           ipCounts,
-		ResponseTimeStats: responseTimeStats,
-		StatusCodes:      a.statusCodes,
+		HourlyPattern:      a.hourlyPattern,
+		HourlyClientErrors: a.hourlyClientErrors,
+		HourlyServerErrors: a.hourlyServerErrors,
+		TopIPs:             ipCounts,
+		ResponseTimeStats:  responseTimeStats,
+		StatusCodes:        a.statusCodes,
 	}
 }
 
