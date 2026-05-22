@@ -35,8 +35,5 @@ go.work
 *.swo
 *~
 
-# Docker volumes
-docker-data/
-
 # Config with sensitive data (if any)
 config/*.local.yaml
