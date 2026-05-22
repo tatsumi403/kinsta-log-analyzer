@@ -256,3 +256,7 @@ cat config.yaml
 # デフォルト設定で実行
 ./log-analyzer --input logs/sample-access.log
 ```
+
+## ライセンス
+
+このプロジェクトは MIT ライセンスの下で公開されています。
