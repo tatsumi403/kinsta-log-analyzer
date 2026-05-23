@@ -119,6 +119,29 @@ func (r *MarkdownReporter) writeHTTPErrors(sb *strings.Builder, errors analyzer.
 		sb.WriteString("エラーURLは見つかりませんでした。\n")
 	}
 	sb.WriteString("\n")
+
+	r.writeErrorURLsByStatus(sb, errors.ErrorURLsByStatus)
+}
+
+func (r *MarkdownReporter) writeErrorURLsByStatus(sb *strings.Builder, byStatus map[int][]analyzer.URLError) {
+	sb.WriteString("### ステータスコード別 エラーURL Top\n\n")
+	if len(byStatus) == 0 {
+		sb.WriteString("対象ステータスコードのエラーは検出されませんでした。\n\n")
+		return
+	}
+	// Display in a fixed, expected order so output is deterministic.
+	order := []int{404, 500, 502, 503, 504}
+	for _, code := range order {
+		urls, ok := byStatus[code]
+		if !ok || len(urls) == 0 {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("#### %d %s\n\n", code, getStatusText(code)))
+		for i, u := range urls {
+			sb.WriteString(fmt.Sprintf("%d. `%s`: %s件\n", i+1, u.URL, utils.FormatNumber(u.Count)))
+		}
+		sb.WriteString("\n")
+	}
 }
 
 func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security analyzer.SecurityAnalysis) {
@@ -170,11 +193,44 @@ func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security a
 			if ip.XSSAttempts > 0 {
 				reasons = append(reasons, fmt.Sprintf("XSS: %d回", ip.XSSAttempts))
 			}
-			sb.WriteString(fmt.Sprintf("%d. **%s** - %s（総リクエスト数: %d）\n", 
+			sb.WriteString(fmt.Sprintf("%d. **%s** - %s（総リクエスト数: %d）\n",
 				i+1, ip.IP, strings.Join(reasons, "、"), ip.TotalRequests))
 		}
 	} else {
 		sb.WriteString("疑わしいIPは検出されませんでした。\n")
+	}
+	sb.WriteString("\n")
+
+	r.writeErrorProneIPs(sb, security.ErrorProneIPs)
+	r.writeBurstIPs(sb, security.BurstIPs)
+}
+
+func (r *MarkdownReporter) writeErrorProneIPs(sb *strings.Builder, ips []analyzer.IPErrorRate) {
+	sb.WriteString("### エラー率の高いIP\n\n")
+	if len(ips) == 0 {
+		sb.WriteString("該当するIPは検出されませんでした。\n\n")
+		return
+	}
+	sb.WriteString("| # | IP | 総リクエスト | エラー数 | エラー率 |\n")
+	sb.WriteString("|---|----|------------:|--------:|--------:|\n")
+	for i, ip := range ips {
+		sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %.1f%% |\n",
+			i+1, ip.IP, utils.FormatNumber(ip.TotalRequests), utils.FormatNumber(ip.ErrorCount), ip.ErrorRate))
+	}
+	sb.WriteString("\n")
+}
+
+func (r *MarkdownReporter) writeBurstIPs(sb *strings.Builder, burstIPs []analyzer.BurstIP) {
+	sb.WriteString("### エラー連発IP（バースト検出）\n\n")
+	if len(burstIPs) == 0 {
+		sb.WriteString("短時間にエラーが集中したIPは検出されませんでした。\n\n")
+		return
+	}
+	sb.WriteString("| # | IP | バースト回数 | 最大バースト時のエラー数 | ウィンドウ |\n")
+	sb.WriteString("|---|----|-----------:|---------------------:|----------|\n")
+	for i, b := range burstIPs {
+		sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %s |\n",
+			i+1, b.IP, utils.FormatNumber(b.BurstCount), utils.FormatNumber(b.MaxBurst), b.Window))
 	}
 	sb.WriteString("\n")
 }
@@ -212,6 +268,8 @@ func (r *MarkdownReporter) writeStatistics(sb *strings.Builder, stats analyzer.S
 	sb.WriteString(fmt.Sprintf("- **95パーセンタイル:** %.3f秒\n", stats.ResponseTimeStats.Percentile95))
 	sb.WriteString(fmt.Sprintf("- **遅いリクエスト（3秒超）:** %s\n", utils.FormatNumber(stats.ResponseTimeStats.SlowRequests)))
 	sb.WriteString("\n")
+
+	r.writeSlowURLs(sb, stats.SlowURLs)
 
 	// Status Code Distribution
 	sb.WriteString("### ステータスコード別集計\n\n")
@@ -285,6 +343,39 @@ func (r *MarkdownReporter) writeUserAgentAnalysis(sb *strings.Builder, ua analyz
 		}
 	} else {
 		sb.WriteString("不審なユーザーエージェントは検出されませんでした。\n")
+	}
+	sb.WriteString("\n")
+
+	r.writeErrorProneUAs(sb, ua.ErrorProneUAs)
+}
+
+func (r *MarkdownReporter) writeErrorProneUAs(sb *strings.Builder, uas []analyzer.UAErrorRate) {
+	sb.WriteString("### エラー頻発ユーザーエージェント\n\n")
+	if len(uas) == 0 {
+		sb.WriteString("エラー率の高いUAは検出されませんでした。\n\n")
+		return
+	}
+	sb.WriteString("| # | UA | 総リクエスト | エラー数 | エラー率 |\n")
+	sb.WriteString("|---|----|------------:|--------:|--------:|\n")
+	for i, u := range uas {
+		userAgent := u.UserAgent
+		if len(userAgent) > 80 {
+			userAgent = userAgent[:77] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("| %d | `%s` | %s | %s | %.1f%% |\n",
+			i+1, userAgent, utils.FormatNumber(u.TotalRequests), utils.FormatNumber(u.ErrorCount), u.ErrorRate))
+	}
+	sb.WriteString("\n")
+}
+
+func (r *MarkdownReporter) writeSlowURLs(sb *strings.Builder, urls []analyzer.URLError) {
+	sb.WriteString("### 遅いリクエスト URL Top\n\n")
+	if len(urls) == 0 {
+		sb.WriteString("遅いリクエストは検出されませんでした。\n\n")
+		return
+	}
+	for i, u := range urls {
+		sb.WriteString(fmt.Sprintf("%d. `%s`: %s件\n", i+1, u.URL, utils.FormatNumber(u.Count)))
 	}
 	sb.WriteString("\n")
 }

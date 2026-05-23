@@ -28,9 +28,10 @@ type Summary struct {
 }
 
 type HTTPErrors struct {
-	ClientErrors map[int]int // 4xx errors: status code -> count
-	ServerErrors map[int]int // 5xx errors: status code -> count
-	TopErrorURLs []URLError
+	ClientErrors      map[int]int // 4xx errors: status code -> count
+	ServerErrors      map[int]int // 5xx errors: status code -> count
+	TopErrorURLs      []URLError
+	ErrorURLsByStatus map[int][]URLError // statusCode -> Top URLs
 }
 
 type SecurityAnalysis struct {
@@ -38,6 +39,8 @@ type SecurityAnalysis struct {
 	XSSAttempts         int
 	SuspiciousIPs       []SuspiciousIP
 	AttacksByIP         map[string]*IPAttacks
+	ErrorProneIPs       []IPErrorRate
+	BurstIPs            []BurstIP
 }
 
 type Statistics struct {
@@ -47,12 +50,14 @@ type Statistics struct {
 	TopIPs             []IPCount
 	ResponseTimeStats  ResponseTimeStats
 	StatusCodes        map[int]int
+	SlowURLs           []URLError
 }
 
 type UserAgentAnalysis struct {
 	Crawlers        map[string]int
 	AttackTools     map[string]int
 	SuspiciousUAs   []UACount
+	ErrorProneUAs   []UAErrorRate
 }
 
 type URLError struct {
@@ -72,6 +77,28 @@ type IPAttacks struct {
 	SQLAttempts   int
 	XSSAttempts   int
 	TotalRequests int
+	ErrorCount    int
+}
+
+type UAErrorRate struct {
+	UserAgent     string
+	TotalRequests int
+	ErrorCount    int
+	ErrorRate     float64
+}
+
+type IPErrorRate struct {
+	IP            string
+	TotalRequests int
+	ErrorCount    int
+	ErrorRate     float64
+}
+
+type BurstIP struct {
+	IP         string
+	BurstCount int    // 検出されたバースト回数
+	MaxBurst   int    // 最大バースト時のエラー数
+	Window     string // 例: "60s"
 }
 
 type IPCount struct {
@@ -110,22 +137,31 @@ type Analyzer struct {
 	attacksByIP         map[string]*IPAttacks
 	crawlers            map[string]int
 	attackTools         map[string]int
+	errorsByUA          map[string]int
+	errorURLsByStatus   map[int]map[string]int
+	slowURLs            map[string]int
+	errorTimestampsByIP map[string][]time.Time
 	startTime           time.Time
 	endTime             time.Time
 }
 
 const maxResponseTimeSamples = 1000 // Limit memory usage to ~8KB for response times
+const maxErrorTimestampsPerIP = 1000 // Cap to bound memory for burst detection
 
 func NewAnalyzer(cfg *config.Config) *Analyzer {
 	return &Analyzer{
-		config:      cfg,
-		ipCounts:    make(map[string]int),
-		errorURLs:   make(map[string]int),
-		statusCodes: make(map[int]int),
-		userAgents:  make(map[string]int),
-		attacksByIP: make(map[string]*IPAttacks),
-		crawlers:    make(map[string]int),
-		attackTools: make(map[string]int),
+		config:              cfg,
+		ipCounts:            make(map[string]int),
+		errorURLs:           make(map[string]int),
+		statusCodes:         make(map[int]int),
+		userAgents:          make(map[string]int),
+		attacksByIP:         make(map[string]*IPAttacks),
+		crawlers:            make(map[string]int),
+		attackTools:         make(map[string]int),
+		errorsByUA:          make(map[string]int),
+		errorURLsByStatus:   make(map[int]map[string]int),
+		slowURLs:            make(map[string]int),
+		errorTimestampsByIP: make(map[string][]time.Time),
 	}
 }
 
@@ -182,6 +218,7 @@ func (a *Analyzer) processEntry(entry *parser.LogEntry) {
 	// Track slow requests
 	if entry.ResponseTime > a.config.Thresholds.SlowRequestTime {
 		a.slowRequestCount++
+		a.slowURLs[entry.URI]++
 	}
 
 	// Reservoir sampling for percentile calculation (memory-efficient)
@@ -216,17 +253,28 @@ func (a *Analyzer) processEntry(entry *parser.LogEntry) {
 	// User agent analysis
 	a.userAgents[entry.UserAgent]++
 
-	// Error analysis
-	if entry.IsError() {
-		a.errorRequests++
-		a.errorURLs[entry.URI]++
-	}
-
 	// Initialize IP attacks if not exists
 	if a.attacksByIP[entry.ClientIP] == nil {
 		a.attacksByIP[entry.ClientIP] = &IPAttacks{}
 	}
 	a.attacksByIP[entry.ClientIP].TotalRequests++
+
+	// Error analysis
+	if entry.IsError() {
+		a.errorRequests++
+		a.errorURLs[entry.URI]++
+		a.errorsByUA[entry.UserAgent]++
+		a.attacksByIP[entry.ClientIP].ErrorCount++
+
+		if a.errorURLsByStatus[entry.StatusCode] == nil {
+			a.errorURLsByStatus[entry.StatusCode] = make(map[string]int)
+		}
+		a.errorURLsByStatus[entry.StatusCode][entry.URI]++
+
+		if len(a.errorTimestampsByIP[entry.ClientIP]) < maxErrorTimestampsPerIP {
+			a.errorTimestampsByIP[entry.ClientIP] = append(a.errorTimestampsByIP[entry.ClientIP], entry.Timestamp)
+		}
+	}
 
 	// Security analysis
 	if a.config.IsSQLInjectionAttempt(entry.URI, entry.UserAgent) {

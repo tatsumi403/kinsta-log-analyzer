@@ -15,8 +15,11 @@ type Config struct {
 }
 
 type Thresholds struct {
-	ErrorRateWarning  float64 `yaml:"error_rate_warning"`
-	SlowRequestTime   float64 `yaml:"slow_request_time"`
+	ErrorRateWarning        float64 `yaml:"error_rate_warning"`
+	SlowRequestTime         float64 `yaml:"slow_request_time"`
+	MinRequestsForErrorRate int     `yaml:"min_requests_for_error_rate"`
+	BurstWindowSeconds      int     `yaml:"burst_window_seconds"`
+	BurstThreshold          int     `yaml:"burst_threshold"`
 }
 
 type Security struct {

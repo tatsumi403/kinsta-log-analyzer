@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"fmt"
 	"sort"
 )
 
@@ -55,9 +56,10 @@ func (a *Analyzer) generateHTTPErrors() HTTPErrors {
 	}
 
 	return HTTPErrors{
-		ClientErrors: clientErrors,
-		ServerErrors: serverErrors,
-		TopErrorURLs: urlErrors,
+		ClientErrors:      clientErrors,
+		ServerErrors:      serverErrors,
+		TopErrorURLs:      urlErrors,
+		ErrorURLsByStatus: a.generateErrorURLsByStatus(),
 	}
 }
 
@@ -93,6 +95,8 @@ func (a *Analyzer) generateSecurityAnalysis() SecurityAnalysis {
 		XSSAttempts:         xssAttempts,
 		SuspiciousIPs:       suspiciousIPs,
 		AttacksByIP:         a.attacksByIP,
+		ErrorProneIPs:       a.generateErrorProneIPs(),
+		BurstIPs:            a.generateBurstIPs(),
 	}
 }
 
@@ -124,6 +128,7 @@ func (a *Analyzer) generateStatistics() Statistics {
 		TopIPs:             ipCounts,
 		ResponseTimeStats:  responseTimeStats,
 		StatusCodes:        a.statusCodes,
+		SlowURLs:           a.generateSlowURLs(),
 	}
 }
 
@@ -157,7 +162,170 @@ func (a *Analyzer) generateUserAgentAnalysis() UserAgentAnalysis {
 		Crawlers:      a.crawlers,
 		AttackTools:   a.attackTools,
 		SuspiciousUAs: suspiciousUAs,
+		ErrorProneUAs: a.generateErrorProneUAs(),
 	}
+}
+
+// generateErrorProneUAs returns UAs sorted by error rate (descending).
+// Only UAs with at least MinRequestsForErrorRate total requests are considered,
+// to avoid noise from one-off requests.
+func (a *Analyzer) generateErrorProneUAs() []UAErrorRate {
+	minReq := a.config.Thresholds.MinRequestsForErrorRate
+	var result []UAErrorRate
+	for ua, total := range a.userAgents {
+		if total < minReq {
+			continue
+		}
+		errs := a.errorsByUA[ua]
+		if errs == 0 {
+			continue
+		}
+		result = append(result, UAErrorRate{
+			UserAgent:     ua,
+			TotalRequests: total,
+			ErrorCount:    errs,
+			ErrorRate:     float64(errs) / float64(total) * 100,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ErrorRate > result[j].ErrorRate
+	})
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
+}
+
+// generateErrorProneIPs returns IPs sorted by error rate (descending).
+// Only IPs with at least MinRequestsForErrorRate total requests are considered.
+func (a *Analyzer) generateErrorProneIPs() []IPErrorRate {
+	minReq := a.config.Thresholds.MinRequestsForErrorRate
+	var result []IPErrorRate
+	for ip, attacks := range a.attacksByIP {
+		if attacks.TotalRequests < minReq {
+			continue
+		}
+		if attacks.ErrorCount == 0 {
+			continue
+		}
+		result = append(result, IPErrorRate{
+			IP:            ip,
+			TotalRequests: attacks.TotalRequests,
+			ErrorCount:    attacks.ErrorCount,
+			ErrorRate:     float64(attacks.ErrorCount) / float64(attacks.TotalRequests) * 100,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ErrorRate > result[j].ErrorRate
+	})
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
+}
+
+// generateErrorURLsByStatus returns Top 10 URLs per target status code (404, 500, 502, 503, 504).
+// Codes with no recorded URLs are omitted from the returned map.
+func (a *Analyzer) generateErrorURLsByStatus() map[int][]URLError {
+	targetCodes := []int{404, 500, 502, 503, 504}
+	result := make(map[int][]URLError)
+	for _, code := range targetCodes {
+		urls, ok := a.errorURLsByStatus[code]
+		if !ok || len(urls) == 0 {
+			continue
+		}
+		var list []URLError
+		for u, c := range urls {
+			list = append(list, URLError{URL: u, Count: c})
+		}
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].Count > list[j].Count
+		})
+		if len(list) > 10 {
+			list = list[:10]
+		}
+		result[code] = list
+	}
+	return result
+}
+
+// generateBurstIPs scans each IP's error timestamps with a sliding window.
+// For every error, count errors within the next BurstWindowSeconds; if it exceeds
+// BurstThreshold, count one burst. Returns Top 10 IPs by burst count.
+// Timestamps are sorted because reservoir-like ordering is not guaranteed.
+func (a *Analyzer) generateBurstIPs() []BurstIP {
+	windowSec := a.config.Thresholds.BurstWindowSeconds
+	threshold := a.config.Thresholds.BurstThreshold
+	if windowSec <= 0 || threshold <= 0 {
+		return nil
+	}
+
+	var result []BurstIP
+	for ip, timestamps := range a.errorTimestampsByIP {
+		if len(timestamps) < threshold {
+			continue
+		}
+		sorted := make([]int64, len(timestamps))
+		for i, t := range timestamps {
+			sorted[i] = t.Unix()
+		}
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+
+		burstCount := 0
+		maxBurst := 0
+		windowDelta := int64(windowSec)
+		right := 0
+		for left := 0; left < len(sorted); left++ {
+			if right < left {
+				right = left
+			}
+			for right < len(sorted) && sorted[right]-sorted[left] <= windowDelta {
+				right++
+			}
+			count := right - left
+			if count >= threshold {
+				burstCount++
+				if count > maxBurst {
+					maxBurst = count
+				}
+			}
+		}
+
+		if burstCount > 0 {
+			result = append(result, BurstIP{
+				IP:         ip,
+				BurstCount: burstCount,
+				MaxBurst:   maxBurst,
+				Window:     fmt.Sprintf("%ds", windowSec),
+			})
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].MaxBurst != result[j].MaxBurst {
+			return result[i].MaxBurst > result[j].MaxBurst
+		}
+		return result[i].BurstCount > result[j].BurstCount
+	})
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
+}
+
+// generateSlowURLs returns Top 10 URLs by slow-request count.
+func (a *Analyzer) generateSlowURLs() []URLError {
+	var result []URLError
+	for u, c := range a.slowURLs {
+		result = append(result, URLError{URL: u, Count: c})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
+	})
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
 }
 
 func (a *Analyzer) calculateResponseTimeStats() ResponseTimeStats {
