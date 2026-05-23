@@ -1,6 +1,9 @@
 thresholds:
-  error_rate_warning: 5.0  # %
-  slow_request_time: 3.0   # seconds
+  error_rate_warning: 5.0           # %
+  slow_request_time: 3.0            # seconds
+  min_requests_for_error_rate: 50   # UA/IPエラー率の最小総リクエスト数（ノイズ除外）
+  burst_window_seconds: 60          # エラーバースト検出ウィンドウ
+  burst_threshold: 20               # ウィンドウ内エラー数の閾値
   
 security:
   sql_injection_patterns:
