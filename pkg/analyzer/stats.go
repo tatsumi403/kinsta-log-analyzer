@@ -90,14 +90,73 @@ func (a *Analyzer) generateSecurityAnalysis() SecurityAnalysis {
 		return suspiciousIPs[i].AttackScore > suspiciousIPs[j].AttackScore
 	})
 
+	errorProneIPs := a.generateErrorProneIPs()
+	burstIPs := a.generateBurstIPs()
+
 	return SecurityAnalysis{
 		SQLInjectionAttempts: sqlAttempts,
 		XSSAttempts:         xssAttempts,
 		SuspiciousIPs:       suspiciousIPs,
 		AttacksByIP:         a.attacksByIP,
-		ErrorProneIPs:       a.generateErrorProneIPs(),
-		BurstIPs:            a.generateBurstIPs(),
+		ErrorProneIPs:       errorProneIPs,
+		BurstIPs:            burstIPs,
+		ErrorSuspiciousIPs:  mergeErrorSuspiciousIPs(errorProneIPs, burstIPs),
 	}
+}
+
+// mergeErrorSuspiciousIPs combines high-error-rate IPs and burst IPs into a
+// single list. IPs flagged by both criteria appear first (more suspicious),
+// then by error rate desc.
+func mergeErrorSuspiciousIPs(errorProneIPs []IPErrorRate, burstIPs []BurstIP) []ErrorSuspiciousIP {
+	byIP := make(map[string]*ErrorSuspiciousIP)
+
+	for _, e := range errorProneIPs {
+		byIP[e.IP] = &ErrorSuspiciousIP{
+			IP:            e.IP,
+			TotalRequests: e.TotalRequests,
+			ErrorCount:    e.ErrorCount,
+			ErrorRate:     e.ErrorRate,
+			Reasons:       []string{"高エラー率"},
+		}
+	}
+
+	for _, b := range burstIPs {
+		if existing, ok := byIP[b.IP]; ok {
+			existing.BurstCount = b.BurstCount
+			existing.MaxBurst = b.MaxBurst
+			existing.Reasons = append(existing.Reasons, "バースト検出")
+		} else {
+			byIP[b.IP] = &ErrorSuspiciousIP{
+				IP:         b.IP,
+				BurstCount: b.BurstCount,
+				MaxBurst:   b.MaxBurst,
+				Reasons:    []string{"バースト検出"},
+			}
+		}
+	}
+
+	result := make([]ErrorSuspiciousIP, 0, len(byIP))
+	for _, v := range byIP {
+		result = append(result, *v)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		// 両方の観点に該当するIPを優先
+		if len(result[i].Reasons) != len(result[j].Reasons) {
+			return len(result[i].Reasons) > len(result[j].Reasons)
+		}
+		// 次にエラー率
+		if result[i].ErrorRate != result[j].ErrorRate {
+			return result[i].ErrorRate > result[j].ErrorRate
+		}
+		// 最後に最大バースト
+		return result[i].MaxBurst > result[j].MaxBurst
+	})
+
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
 }
 
 func (a *Analyzer) generateStatistics() Statistics {
