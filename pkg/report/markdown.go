@@ -201,8 +201,40 @@ func (r *MarkdownReporter) writeSecurityAnalysis(sb *strings.Builder, security a
 	}
 	sb.WriteString("\n")
 
+	r.writeErrorSuspiciousIPs(sb, security.ErrorSuspiciousIPs)
 	r.writeErrorProneIPs(sb, security.ErrorProneIPs)
 	r.writeBurstIPs(sb, security.BurstIPs)
+}
+
+func (r *MarkdownReporter) writeErrorSuspiciousIPs(sb *strings.Builder, ips []analyzer.ErrorSuspiciousIP) {
+	sb.WriteString("### 疑わしいIP（エラー観点 / ブロック推奨）\n\n")
+	if len(ips) == 0 {
+		sb.WriteString("エラー観点で疑わしいIPは検出されませんでした。\n\n")
+		return
+	}
+	sb.WriteString("| # | IP | 該当観点 | 総リクエスト | エラー数 | エラー率 | 最大バースト |\n")
+	sb.WriteString("|---|----|--------|------------:|--------:|--------:|-----------:|\n")
+	for i, ip := range ips {
+		totalReq := "-"
+		if ip.TotalRequests > 0 {
+			totalReq = utils.FormatNumber(ip.TotalRequests)
+		}
+		errorCount := "-"
+		if ip.ErrorCount > 0 {
+			errorCount = utils.FormatNumber(ip.ErrorCount)
+		}
+		errorRate := "-"
+		if ip.ErrorRate > 0 {
+			errorRate = fmt.Sprintf("%.1f%%", ip.ErrorRate)
+		}
+		maxBurst := "-"
+		if ip.MaxBurst > 0 {
+			maxBurst = utils.FormatNumber(ip.MaxBurst)
+		}
+		sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %s | %s | %s |\n",
+			i+1, ip.IP, strings.Join(ip.Reasons, "、"), totalReq, errorCount, errorRate, maxBurst))
+	}
+	sb.WriteString("\n")
 }
 
 func (r *MarkdownReporter) writeErrorProneIPs(sb *strings.Builder, ips []analyzer.IPErrorRate) {

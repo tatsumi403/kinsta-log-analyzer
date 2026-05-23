@@ -41,6 +41,7 @@ type SecurityAnalysis struct {
 	AttacksByIP         map[string]*IPAttacks
 	ErrorProneIPs       []IPErrorRate
 	BurstIPs            []BurstIP
+	ErrorSuspiciousIPs  []ErrorSuspiciousIP
 }
 
 type Statistics struct {
@@ -99,6 +100,18 @@ type BurstIP struct {
 	BurstCount int    // 検出されたバースト回数
 	MaxBurst   int    // 最大バースト時のエラー数
 	Window     string // 例: "60s"
+}
+
+// ErrorSuspiciousIP はエラー観点（高エラー率 / 短時間バースト）で
+// 疑わしいと判定されたIPを表す。SuspiciousIP（SQLi/XSS 観点）とは独立。
+type ErrorSuspiciousIP struct {
+	IP            string
+	TotalRequests int
+	ErrorCount    int
+	ErrorRate     float64  // エラー率（高エラー率該当時のみ意味を持つ）
+	BurstCount    int      // バースト検出回数（バースト該当時のみ意味を持つ）
+	MaxBurst      int      // 最大バースト時のエラー数（バースト該当時のみ意味を持つ）
+	Reasons       []string // 該当した観点（例: "高エラー率", "バースト検出"）
 }
 
 type IPCount struct {
