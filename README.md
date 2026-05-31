@@ -25,16 +25,16 @@ go mod download
 # アプリケーションのビルド
 go build -o log-analyzer ./cmd/log-analyzer
 
-# サンプルログの解析
+# サンプルログの解析（config.yaml が自動的に読み込まれる）
 ./log-analyzer --input logs/sample-access.log --verbose
 
-# カスタム設定での実行
-./log-analyzer --input /path/to/access.log --config config.yaml --output /custom/output
+# 出力先を変更して実行（--config 省略時は config.yaml をデフォルトで使用）
+./log-analyzer --input /path/to/access.log --output /custom/output
 ```
 
 ## 設定ファイル
 
-`config.yaml`で解析パラメータをカスタマイズできます：
+`config.yaml` で解析パラメータをカスタマイズできます。`--config` を省略した場合、カレントディレクトリ → 実行ファイルと同じディレクトリの順で `config.yaml` を自動検索します：
 
 ```yaml
 thresholds:
@@ -229,8 +229,8 @@ go test ./... -cover
 # カスタム設定ファイルを使用
 ./log-analyzer --input logs/access.log --config custom-config.yaml
 
-# 複数オプションを組み合わせ
-./log-analyzer --input logs/access.log --config config.yaml --output ./reports --verbose
+# 複数オプションを組み合わせ（--config 省略で config.yaml を自動使用）
+./log-analyzer --input logs/access.log --output ./reports --verbose
 ```
 
 ## 出力ファイル
@@ -260,11 +260,14 @@ ls -la logs/
 
 ### 設定ファイルの読み込みエラー
 ```bash
+# config.yaml がカレントディレクトリまたは実行ファイルと同じディレクトリに存在するか確認
+ls config.yaml
+
 # YAML構文を確認
 cat config.yaml
 
-# デフォルト設定で実行
-./log-analyzer --input logs/sample-access.log
+# 別の場所にある設定ファイルを明示的に指定
+./log-analyzer --input logs/sample-access.log --config /path/to/config.yaml
 ```
 
 ## ライセンス
