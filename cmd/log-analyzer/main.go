@@ -207,6 +207,9 @@ func resolveConfigPath(name string) string {
 }
 
 func init() {
+	flag.StringVar(inputFile, "i", "", "Path to the log file to analyze (required, shorthand)")
+	flag.StringVar(outputDir, "o", "./output", "Output directory for reports (shorthand)")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Kinsta Log Analyzer v%s\n", version)
 		fmt.Fprintf(os.Stderr, "A tool for analyzing Kinsta Nginx access logs\n\n")
