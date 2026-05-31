@@ -18,7 +18,7 @@ var (
 	version = "1.0.0"
 	
 	inputFile  = flag.String("input", "", "Path to the log file to analyze (required)")
-	configFile = flag.String("config", "config.yaml", "Path to the configuration file")
+	configFile = flag.String("config", "", "Path to the configuration file (default: config.yaml)")
 	outputDir  = flag.String("output", "./output", "Output directory for reports")
 	showVersion = flag.Bool("version", false, "Show version information")
 	verbose    = flag.Bool("verbose", false, "Enable verbose logging")
@@ -26,6 +26,19 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *configFile == "" {
+		resolved, searched := resolveConfigPath("config.yaml")
+		if resolved == "" {
+			fmt.Fprintf(os.Stderr, "Error: config.yaml が見つかりません。以下の場所を検索しました:\n")
+			for _, p := range searched {
+				fmt.Fprintf(os.Stderr, "  %s\n", p)
+			}
+			fmt.Fprintf(os.Stderr, "\nいずれかのパスに config.yaml を置くか、--config でパスを指定してください。\n")
+			os.Exit(1)
+		}
+		*configFile = resolved
+	}
 
 	if *showVersion {
 		fmt.Printf("Kinsta Log Analyzer v%s\n", version)
@@ -180,7 +193,40 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 }
 
 
+func resolveConfigPath(name string) (string, []string) {
+	var searched []string
+
+	// 1. CWD
+	if _, err := os.Stat(name); err == nil {
+		return name, nil
+	}
+	searched = append(searched, name)
+
+	// 2. 実行ファイルと同じディレクトリ
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		searched = append(searched, candidate)
+	}
+
+	// 3. ~/.config/kinsta-log-analyzer/config.yaml
+	if configDir, err := os.UserConfigDir(); err == nil {
+		candidate := filepath.Join(configDir, "kinsta-log-analyzer", name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		searched = append(searched, candidate)
+	}
+
+	return "", searched
+}
+
 func init() {
+	flag.StringVar(inputFile, "i", "", "Path to the log file to analyze (required, shorthand)")
+	flag.StringVar(outputDir, "o", "./output", "Output directory for reports (shorthand)")
+
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Kinsta Log Analyzer v%s\n", version)
 		fmt.Fprintf(os.Stderr, "A tool for analyzing Kinsta Nginx access logs\n\n")
