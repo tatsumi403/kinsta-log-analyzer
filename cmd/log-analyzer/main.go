@@ -18,7 +18,7 @@ var (
 	version = "1.0.0"
 	
 	inputFile  = flag.String("input", "", "Path to the log file to analyze (required)")
-	configFile = flag.String("config", "config.yaml", "Path to the configuration file")
+	configFile = flag.String("config", "", "Path to the configuration file (default: config.yaml)")
 	outputDir  = flag.String("output", "./output", "Output directory for reports")
 	showVersion = flag.Bool("version", false, "Show version information")
 	verbose    = flag.Bool("verbose", false, "Enable verbose logging")
@@ -26,6 +26,10 @@ var (
 
 func main() {
 	flag.Parse()
+
+	if *configFile == "" {
+		*configFile = resolveConfigPath("config.yaml")
+	}
 
 	if *showVersion {
 		fmt.Printf("Kinsta Log Analyzer v%s\n", version)
@@ -179,6 +183,19 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 	fmt.Println()
 }
 
+
+func resolveConfigPath(name string) string {
+	if _, err := os.Stat(name); err == nil {
+		return name
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return name
+}
 
 func init() {
 	flag.Usage = func() {
