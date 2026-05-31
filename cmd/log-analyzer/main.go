@@ -28,7 +28,16 @@ func main() {
 	flag.Parse()
 
 	if *configFile == "" {
-		*configFile = resolveConfigPath("config.yaml")
+		resolved, searched := resolveConfigPath("config.yaml")
+		if resolved == "" {
+			fmt.Fprintf(os.Stderr, "Error: config.yaml が見つかりません。以下の場所を検索しました:\n")
+			for _, p := range searched {
+				fmt.Fprintf(os.Stderr, "  %s\n", p)
+			}
+			fmt.Fprintf(os.Stderr, "\nいずれかのパスに config.yaml を置くか、--config でパスを指定してください。\n")
+			os.Exit(1)
+		}
+		*configFile = resolved
 	}
 
 	if *showVersion {
@@ -184,26 +193,34 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 }
 
 
-func resolveConfigPath(name string) string {
+func resolveConfigPath(name string) (string, []string) {
+	var searched []string
+
 	// 1. CWD
 	if _, err := os.Stat(name); err == nil {
-		return name
+		return name, nil
 	}
+	searched = append(searched, name)
+
 	// 2. 実行ファイルと同じディレクトリ
 	if exe, err := os.Executable(); err == nil {
 		candidate := filepath.Join(filepath.Dir(exe), name)
 		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+			return candidate, nil
 		}
+		searched = append(searched, candidate)
 	}
+
 	// 3. ~/.config/kinsta-log-analyzer/config.yaml
 	if configDir, err := os.UserConfigDir(); err == nil {
 		candidate := filepath.Join(configDir, "kinsta-log-analyzer", name)
 		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+			return candidate, nil
 		}
+		searched = append(searched, candidate)
 	}
-	return name
+
+	return "", searched
 }
 
 func init() {
