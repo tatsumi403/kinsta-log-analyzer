@@ -185,11 +185,20 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 
 
 func resolveConfigPath(name string) string {
+	// 1. CWD
 	if _, err := os.Stat(name); err == nil {
 		return name
 	}
+	// 2. 実行ファイルと同じディレクトリ
 	if exe, err := os.Executable(); err == nil {
 		candidate := filepath.Join(filepath.Dir(exe), name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	// 3. ~/.config/kinsta-log-analyzer/config.yaml
+	if configDir, err := os.UserConfigDir(); err == nil {
+		candidate := filepath.Join(configDir, "kinsta-log-analyzer", name)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}

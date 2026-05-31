@@ -34,7 +34,12 @@ go build -o log-analyzer ./cmd/log-analyzer
 
 ## 設定ファイル
 
-`config.yaml` で解析パラメータをカスタマイズできます。`--config` を省略した場合、カレントディレクトリ → 実行ファイルと同じディレクトリの順で `config.yaml` を自動検索します：
+`config.yaml` で解析パラメータをカスタマイズできます。`--config` を省略した場合、以下の順で `config.yaml` を自動検索します：
+
+1. カレントディレクトリ
+2. 実行ファイルと同じディレクトリ
+3. `~/.config/kinsta-log-analyzer/config.yaml`（`go install` でどこからでも実行する場合はここに置く）
+
 
 ```yaml
 thresholds:
