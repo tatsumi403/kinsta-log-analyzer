@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"kinsta-log-analyzer/pkg/analyzer"
@@ -47,9 +49,10 @@ func main() {
 	}
 
 	if *inputFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: --input flag is required\n")
-		flag.Usage()
-		os.Exit(1)
+		if err := promptInteractive(); err != nil {
+			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Check if input file exists
@@ -192,6 +195,41 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 	fmt.Println()
 }
 
+
+func promptInteractive() error {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("=== Kinsta Log Analyzer ===")
+
+	for *inputFile == "" {
+		fmt.Print("解析するログファイルのパス: ")
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("入力読み取りエラー: %w", err)
+		}
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			fmt.Printf("ファイルが見つかりません: %s\n", path)
+			continue
+		}
+		*inputFile = path
+	}
+
+	fmt.Printf("出力ディレクトリ [%s]: ", *outputDir)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("入力読み取りエラー: %w", err)
+	}
+	if dir := strings.TrimSpace(line); dir != "" {
+		*outputDir = dir
+	}
+
+	fmt.Println()
+	return nil
+}
 
 func resolveConfigPath(name string) (string, []string) {
 	var searched []string
