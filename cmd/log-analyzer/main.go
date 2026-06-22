@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"kinsta-log-analyzer/pkg/analyzer"
@@ -47,9 +50,10 @@ func main() {
 	}
 
 	if *inputFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: --input flag is required\n")
-		flag.Usage()
-		os.Exit(1)
+		if err := promptInteractive(); err != nil {
+			fmt.Fprintf(os.Stderr, "エラー: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Check if input file exists
@@ -192,6 +196,89 @@ func printRecommendations(result *analyzer.AnalysisResult) {
 	fmt.Println()
 }
 
+
+func listLogFiles(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
+			files = append(files, filepath.Join(dir, e.Name()))
+		}
+	}
+	return files
+}
+
+func promptFileSelection(reader *bufio.Reader) (string, error) {
+	candidates := listLogFiles("logs")
+
+	if len(candidates) > 0 {
+		fmt.Println("\n解析するログファイルを選択してください:")
+		for i, f := range candidates {
+			fmt.Printf("  %d) %s\n", i+1, f)
+		}
+		fmt.Println("  0) パスを直接入力")
+		fmt.Printf("\n選択 [1]: ")
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("入力読み取りエラー: %w", err)
+		}
+		input := strings.TrimSpace(line)
+
+		if input == "" {
+			return candidates[0], nil
+		}
+		n, err := strconv.Atoi(input)
+		if err == nil && n >= 1 && n <= len(candidates) {
+			return candidates[n-1], nil
+		}
+		// 0 または範囲外 → 手入力へ
+	}
+
+	for {
+		fmt.Print("解析するログファイルのパス: ")
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("入力読み取りエラー: %w", err)
+		}
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			fmt.Printf("ファイルが見つかりません: %s\n", path)
+			continue
+		}
+		return path, nil
+	}
+}
+
+func promptInteractive() error {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("=== Kinsta Log Analyzer ===")
+
+	path, err := promptFileSelection(reader)
+	if err != nil {
+		return err
+	}
+	*inputFile = path
+
+	fmt.Printf("出力ディレクトリ [%s]: ", *outputDir)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("入力読み取りエラー: %w", err)
+	}
+	if dir := strings.TrimSpace(line); dir != "" {
+		*outputDir = dir
+	}
+
+	fmt.Println()
+	return nil
+}
 
 func resolveConfigPath(name string) (string, []string) {
 	var searched []string
